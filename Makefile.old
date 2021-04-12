@@ -1,0 +1,11 @@
+# Basic Makefile
+
+OBJS = src/editor_sdl.cpp
+CC = g++
+CFLAGS = -std=c++17
+INCLUDE_DIR = lib/imgui
+LINKER_FLAGS = -lSDL2
+OBJ_NAME = bin/editor_sdl
+
+all : $(OBJS)
+	$(CC) $(OBJS) $(COMPILER_FLAGS) -I $(INCLUDE_DIR) $(LINKER_FLAGS) -o $(OBJ_NAME)
