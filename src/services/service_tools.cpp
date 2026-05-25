@@ -49,6 +49,7 @@ namespace ae {
       while (!line.empty() && line.back() == '\n') line.pop_back();
       if (!line.empty()) {
         set_status(line);
+        printf("%s\n", line.c_str());
       }
     }
   }
@@ -131,10 +132,8 @@ namespace ae {
     return result;
   }
 
-  std::future<bool> LoadedTools::render(const std::string& manifest, const std::string& output) {
-    std::stringstream cmd;
-    cmd << "scripts/render_all.sh " << manifest << " " << output;
-    std::string command = cmd.str();
+  std::future<bool> LoadedTools::render(const std::string& script_path, const std::string& output) {
+    std::string command = "sh " + script_path;
 
     set_status("Starting render...");
 

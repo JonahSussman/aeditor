@@ -316,6 +316,12 @@ namespace wm {
     std::future<bool> future;
     bool has_future = false;
 
+    static std::string sanitize(const std::string& s) {
+      std::string out;
+      for (char c : s) if (c != '\'') out += c;
+      return out;
+    }
+
     void render() {
       if (show) return;
 
@@ -369,20 +375,66 @@ namespace wm {
         jobs[i].total = i + 1;
       }
 
-      std::ofstream manifest("data/render_manifest.csv");
-      for (auto& j : jobs) {
-        manifest << filename_no_ext << ","
-                 << j.start_sec << ","
-                 << j.length_sec << ","
-                 << j.word << ","
-                 << j.count << ","
-                 << j.total << ","
-                 << j.season << ","
-                 << j.episode << "\n";
-      }
-      manifest.close();
+      int n = (int)jobs.size();
+      if (n == 0) return;
 
-      future = tools->render("data/render_manifest.csv", "data/render_output.mkv");
+      std::string font = "${RENDER_FONT:-/home/jonah/.fonts/iosevka.ttf}";
+      std::string branding = "${RENDER_BRANDING:-inothernews1}";
+
+      // Write filter script
+      std::ofstream filter("data/render_filter.txt");
+      for (int i = 0; i < n; i++) {
+        auto& j = jobs[i];
+        std::string w = sanitize(j.word);
+        filter << "[" << i << ":v]"
+               << "drawtext=fontfile='$FONT':fontsize=75:fontcolor=#ffffff"
+               << ":text='" << w << "':x=(w-tw)/2:y=h-th-20"
+               << ":box=1:boxcolor=#0000007f:boxborderw=5,"
+               << "drawtext=fontfile='$FONT':fontsize=30:fontcolor=#ffffff"
+               << ":text='Times said\\: " << j.count << "':x=20:y=h-th-20"
+               << ":box=1:boxcolor=#0000007f:boxborderw=5,"
+               << "drawtext=fontfile='$FONT':fontsize=30:fontcolor=#ffffff"
+               << ":text='Total words\\: " << j.total << "':x=20:y=20"
+               << ":box=1:boxcolor=#0000007f:boxborderw=5,"
+               << "drawtext=fontfile='$FONT':fontsize=30:fontcolor=#ffffff"
+               << ":text='S" << j.season << " E" << j.episode << "':x=w-tw-20:y=20"
+               << ":box=1:boxcolor=#0000007f:boxborderw=5,"
+               << "drawtext=fontfile='$FONT':fontsize=30:fontcolor=#ffffff"
+               << ":text='$BRANDING':x=w-tw-20:y=h-th-20"
+               << ":box=1:boxcolor=#0000007f:boxborderw=5"
+               << "[v" << i << "]; "
+               << "[" << i << ":a]anull[a" << i << "];\n";
+      }
+
+      // Concat line
+      for (int i = 0; i < n; i++) filter << "[v" << i << "][a" << i << "]";
+      filter << "concat=n=" << n << ":v=1:a=1[outv][outa]\n";
+      filter.close();
+
+      // Write command script
+      std::ofstream cmd("data/render_cmd.sh");
+      cmd << "#!/bin/sh\n";
+      cmd << "FONT=\"" << font << "\"\n";
+      cmd << "BRANDING=\"" << branding << "\"\n";
+      cmd << "export FONT BRANDING\n";
+      cmd << "sed -i \"s|\\$FONT|$FONT|g;s|\\$BRANDING|$BRANDING|g\" data/render_filter.txt\n";
+      cmd << "echo \"Starting render of " << n << " clips...\"\n";
+      cmd << "ffmpeg -nostdin -hide_banner \\\n";
+      for (int i = 0; i < n; i++) {
+        cmd << "  -ss " << jobs[i].start_sec
+            << " -t " << jobs[i].length_sec
+            << " -i \"" << filename_no_ext << ".mkv\" \\\n";
+      }
+      cmd << "  -filter_complex_script data/render_filter.txt \\\n";
+      cmd << "  -map \"[outv]\" -map \"[outa]\" \\\n";
+      cmd << "  -c:v libx264 -c:a aac -ar 44100 -ac 1 \\\n";
+      cmd << "  -avoid_negative_ts make_zero \\\n";
+      cmd << "  -progress pipe:1 \\\n";
+      cmd << "  data/render_output.mkv -y 2>&1\n";
+      cmd << "echo \"Done.\"\n";
+      cmd.close();
+
+      future = tools->render("data/render_cmd.sh", "data/render_output.mkv");
       has_future = true;
       show = true;
     }
