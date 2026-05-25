@@ -21,7 +21,7 @@ namespace ae {
     // FIXME: Find out how to convert int -> Line *while also retaining*
     // Line l = { 0, 0, 0, "" }; stuff
 
-    // Line(int s, int e, libvlc_time_t ms, std::string g) 
+    // Line(int s, int e, libvlc_time_t ms, std::string g)
     //   : season(s), episode(e), timestamp(ms), str(g) { }
     // Line(libvlc_time_t ms) : timestamp(ms) { }
     // Line& operator= (const int& ms) { timestamp = ms; return *this; }
@@ -74,8 +74,6 @@ namespace ae {
     std::set<Line> lines;
   };
 
-
-
   class LoadedScript : public Script {
   public:
     LoadedScript();
@@ -84,7 +82,7 @@ namespace ae {
 
     virtual Litr get(s64 ms);
     virtual Litr add(Line l);
-    
+
     virtual Litr erase(Litr itr);
     virtual Litr erase(s64 ms);
     virtual Line pop_deleted();

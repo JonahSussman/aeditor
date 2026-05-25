@@ -21,6 +21,7 @@
 #include <SFML/Audio.hpp>
 
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui-SFML.h"
 
 #include <vlc/vlc.h>
@@ -216,81 +217,98 @@ namespace wm {
   } save;
 
   static struct Aligner : public Window {
-    std::future<std::string>* future;
+    std::future<bool> future;
+    bool has_future = false;
     ae::Litr itr;
     ae::Loop loop;
-    std::string command;
 
     void align(ae::Litr litr) {
       if (show) return;
 
       itr = litr;
-
       Locator::get_vlc_service()->seek((*itr).timestamp);
       Locator::get_vlc_service()->pause();
 
       loop = bounds(itr);
-      float start = (float) loop.start / 1000.f;
-      float end   = (float) loop.end / 1000.f;
-      float length = end - start;
-
-      std::cout << "HERE!" << std::endl;
-
-      std::stringstream con;
-      con << "wsl -d Ubuntu-18.04 echo \"" << (*itr).str << "\" > data/mfa_input/align.txt";
-      printf("COMMAND: %s\n", con.str().c_str());
-      util::shell(con.str().c_str());
-
-      std::stringstream cmd;
-      cmd << "wsl -d Ubuntu-18.04 ./scripts/align.sh " << filename_no_ext << " " << start << " " << length;
-      printf("COMMAND: %s\n", cmd.str().c_str());
-      command = cmd.str();
-      future = new std::future<std::string>(std::async(std::launch::async, util::shell, command.c_str()));
-      printf("FUTURE CREATED!\n");
-      // util::shell(cmd.str().c_str());
+      auto tools = Locator::get_tools_service();
+      future = tools->align(*itr, loop, filename_no_ext);
+      has_future = true;
       show = true;
     }
 
     virtual void draw() {
       ig::OpenPopup("Align");
-      if (ig::BeginPopupModal("Align")){      
-        if (future and util::future_ready(*future)) {
-          auto script = Locator::get_script_service();
-          std::ifstream f("data/mfa_output/align.csv");
-          // FIXME: More robust way of handling that file is not present
-          if (f.good()) {
-            printf("F IS GOOD!\n");
-            auto first_line = true;
+      if (ig::BeginPopupModal("Align")) {
+        if (has_future && util::future_ready(future)) {
+          bool ok = future.get();
+          has_future = false;
+
+          if (ok) {
+            auto script = Locator::get_script_service();
+            auto tools = Locator::get_tools_service();
+            auto results = tools->consume_align_results();
             auto l = *itr;
-            auto setback = 10;
-            printf("L DEFINED!\n");
             script->erase(itr);
-            printf("ERASED ITR!\n");
 
-            for (util::CSVIterator c(f); c != util::CSVIterator(); ++c) {
-              printf("%s\n", "LINE!");
-              if (first_line) { first_line = false; continue; }
-              if ((*c)[3] == "phones") break;
-
-              s64 timestamp   = std::stof((*c)[0]) * 1000 + l.timestamp;
-              if (timestamp > loop.end) timestamp = loop.end - setback--;
-              std::string str = (*c)[2];
-
-              script->add({ l.season, l.episode, timestamp, str });
+            auto setback = 10;
+            for (auto& r : results) {
+              if (r.timestamp > loop.end)
+                r.timestamp = loop.end - setback--;
+              script->add(r);
             }
-          } else {
-            printf("F NOT GOOD BRUH!\n");
           }
-          util::delnull(future);
           show = false;
         } else {
-          ig::TextColored(ImVec4(1.f, .5f, .5f, 1.f), "Aligning. Please wait...");
+          auto status = Locator::get_tools_service()->get_status();
+          ig::TextColored(ImVec4(1.f, .5f, .5f, 1.f), "%s", status.c_str());
         }
-
         ig::EndPopup();
       }
     }
   } aligner;
+
+  static struct Transcriber : public Window {
+    std::future<bool> future;
+    bool has_future = false;
+    ae::Litr itr;
+
+    void transcribe(ae::Litr litr) {
+      if (show) return;
+
+      itr = litr;
+      Locator::get_vlc_service()->seek((*itr).timestamp);
+      Locator::get_vlc_service()->pause();
+
+      auto tools = Locator::get_tools_service();
+      future = tools->transcribe(bounds(itr), filename_no_ext);
+      has_future = true;
+      show = true;
+    }
+
+    virtual void draw() {
+      ig::OpenPopup("Transcribe");
+      if (ig::BeginPopupModal("Transcribe")) {
+        if (has_future && util::future_ready(future)) {
+          bool ok = future.get();
+          has_future = false;
+
+          if (ok) {
+            auto script = Locator::get_script_service();
+            auto tools = Locator::get_tools_service();
+            auto text = tools->consume_transcribe_result();
+            auto l = *itr;
+            l.str = text;
+            script->update(itr, l);
+          }
+          show = false;
+        } else {
+          auto status = Locator::get_tools_service()->get_status();
+          ig::TextColored(ImVec4(1.f, .5f, .5f, 1.f), "%s", status.c_str());
+        }
+        ig::EndPopup();
+      }
+    }
+  } transcriber;
 
   // FIXME: Figure out how to make this more... better
   static struct EditLine : public Window {
@@ -542,6 +560,7 @@ namespace wm {
             if (ig::Selectable("Edit")) edit_line.update_and_show(itr);
             if (ig::Selectable("Explode"));
             if (ig::Selectable("Align")) wm::aligner.align(itr);
+            if (ig::Selectable("Transcribe")) wm::transcriber.transcribe(itr);
             if (ig::Selectable("Delete")) script->erase(itr);
 
             ig::EndPopup();
@@ -593,6 +612,7 @@ namespace wm {
       ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Ctrl+N");       ig::NextColumn(); ig::Text("New line at current time"); ig::NextColumn();
       ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Ctrl+L");       ig::NextColumn(); ig::Text("Toggle line selector");    ig::NextColumn();
       ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Ctrl+A");       ig::NextColumn(); ig::Text("Align (MFA)");             ig::NextColumn();
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Ctrl+T");       ig::NextColumn(); ig::Text("Transcribe (Whisper)");    ig::NextColumn();
       ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Ctrl+Z");       ig::NextColumn(); ig::Text("Undo last delete");        ig::NextColumn();
 
       ig::Columns(1);
@@ -601,24 +621,13 @@ namespace wm {
   } help;
 
   static struct Console : public Window {
-    FILE* wsl;
     char buf[256];
     std::vector<std::string> history;
     bool enter = false;
-    std::future<std::string>* future;
+    std::future<std::string>* future = nullptr;
 
     Console() {
-      show = true;
-      
-      wsl = popen ("wsl", "w");
-    }
-
-    ~Console() {
-      pclose(wsl);
-    }
-
-    std::string exec(std::string cmd) {
-
+      show = false;
     }
 
     virtual void draw() {
@@ -728,8 +737,26 @@ namespace wm {
     if (seek.show)      seek.draw();
     if (save.show)      save.draw();
     if (edit_line.show) edit_line.draw();
-    if (aligner.show)   aligner.draw();
-    // ig::ShowDemoWindow();
+    if (aligner.show)      aligner.draw();
+    if (transcriber.show)  transcriber.draw();
+
+    // Clamp all windows so they stay on screen when the main window resizes
+    ImVec2 display = io->DisplaySize;
+    for (int i = 0; i < ig::GetCurrentContext()->Windows.Size; i++) {
+      ImGuiWindow* w = ig::GetCurrentContext()->Windows[i];
+      if (!w->Active || w->Flags & ImGuiWindowFlags_NoMove) continue;
+
+      ImVec2 pos = w->Pos;
+      ImVec2 size = w->Size;
+      bool changed = false;
+
+      if (pos.x + size.x > display.x) { pos.x = display.x - size.x; changed = true; }
+      if (pos.y + size.y > display.y) { pos.y = display.y - size.y; changed = true; }
+      if (pos.x < 0) { pos.x = 0; changed = true; }
+      if (pos.y < 0) { pos.y = 0; changed = true; }
+
+      if (changed) ig::SetWindowPos(w, pos);
+    }
   }
 }
 
@@ -737,6 +764,7 @@ namespace wm {
 bool load_files(std::string str) {
   if (Locator::mode != Mode::UNLOADED) {
     Locator::free_vlc_service();
+    Locator::free_tools_service();
 
     save_script(str);
     Locator::free_script_service();
@@ -750,6 +778,7 @@ bool load_files(std::string str) {
   }
 
   Locator::provide_vlc_service(attempted_vlc_service);
+  Locator::provide_tools_service(new ae::LoadedTools());
 
   wm::video.update_dimensions();
 
@@ -940,13 +969,12 @@ int main(int argc, char* argv[]) {
               break;
             case sfk::A:
               if (io->KeyCtrl) {
-                if (io->KeyAlt && io->KeyShift) {
-                  // std::cout << "FULL SEND!" << std::endl;
-                  // wm::aligner.full_align(litr);
-                } else {
-                  std::cout << "ALIGN INITIATED!" << std::endl;
-                  wm::aligner.align(litr);
-                }
+                wm::aligner.align(litr);
+              }
+              break;
+            case sfk::T:
+              if (io->KeyCtrl) {
+                wm::transcriber.transcribe(litr);
               }
               break;
             case sfk::C:

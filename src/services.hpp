@@ -7,5 +7,6 @@
 
 #include "services/service_vlc.hpp"
 #include "services/service_script.hpp"
+#include "services/service_tools.hpp"
 
 #include "services/locator.hpp"

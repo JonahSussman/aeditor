@@ -43,6 +43,7 @@ add_executable(aeditor
   src/services/locator.cpp
   src/services/service_vlc.cpp
   src/services/service_script.cpp
+  src/services/service_tools.cpp
 )
 
 target_include_directories(aeditor PRIVATE ${CMAKE_SOURCE_DIR}/src)
@@ -80,4 +81,5 @@ add_custom_command(TARGET aeditor POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_SOURCE_DIR}/assets/scripts
     $<TARGET_FILE_DIR:aeditor>/scripts
+  COMMAND chmod +x $<TARGET_FILE_DIR:aeditor>/scripts/*.sh
 )

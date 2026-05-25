@@ -2,6 +2,7 @@
 
 #include "service_vlc.hpp"
 #include "service_script.hpp"
+#include "service_tools.hpp"
 
 // A video can either be unloaded, paused, or playing. If playing, the video
 // will continuously lop between two set points.
@@ -27,10 +28,17 @@ public:
   static void provide_script_service(ae::Script* service);
   static void free_script_service();
 
+  static ae::Tools* get_tools_service();
+  static void provide_tools_service(ae::Tools* service);
+  static void free_tools_service();
+
 private:
   static inline ae::NullVLC vlc_null;
   static inline ae::VLC* vlc_service;
 
   static inline ae::NullScript script_null;
   static inline ae::Script* script_service;
+
+  static inline ae::NullTools tools_null;
+  static inline ae::Tools* tools_service;
 };

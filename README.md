@@ -36,6 +36,33 @@ cd build
 ./aeditor
 ```
 
+## Optional Tools
+
+### Transcription (Ctrl+T) — Whisper
+
+```bash
+uv tool install openai-whisper
+```
+
+### Forced Alignment (Ctrl+A) — Montreal Forced Aligner
+
+Requires [conda](https://docs.conda.io/en/latest/miniconda.html):
+
+```bash
+conda create -n aligner -c conda-forge montreal-forced-aligner
+conda run -n aligner mfa model download acoustic english_us_arpa
+conda run -n aligner mfa model download dictionary english_us_arpa
+```
+
+You can customize the conda environment name and models via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MFA_ENV` | `aligner` | Conda environment name |
+| `MFA_DICT` | `english_us_arpa` | MFA dictionary name |
+| `MFA_MODEL` | `english_us_arpa` | MFA acoustic model name |
+| `WHISPER_MODEL` | `base` | Whisper model size (`tiny`, `base`, `small`, `medium`, `large`) |
+
 ## Usage
 
 Open a video with **Ctrl+O**, enter the filename without extension, and click **Auto-find**. This loads both the video (`.mkv`) and its script (`.csv`) if one exists.
@@ -62,6 +89,7 @@ Open a video with **Ctrl+O**, enter the filename without extension, and click **
 | Ctrl+N | New line at current timestamp |
 | Ctrl+L | Toggle line selector |
 | Ctrl+A | Align line (Montreal Forced Aligner) |
+| Ctrl+T | Transcribe line (Whisper) |
 | Ctrl+Z | Undo last delete |
 
 ## Gallery
