@@ -1,9 +1,11 @@
 #include "service_vlc.hpp"
 
 #include <cassert>
+#include <chrono>
 #include <cinttypes>
 #include <cstdio>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "locator.hpp"
@@ -86,11 +88,17 @@ namespace ae {
       return false;
     }
 
-    // All this to ignore a single deprecated declaration? Wow.
-    #pragma GCC diagnostic push
-    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-    libvlc_media_parse(media);
-    #pragma GCC diagnostic pop
+    libvlc_media_parse_with_options(media, libvlc_media_parse_local, -1);
+
+    // Wait for async parse to complete
+    for (int i = 0; i < 50; ++i) {
+      auto status = libvlc_media_get_parsed_status(media);
+      if (status == libvlc_media_parsed_status_done ||
+          status == libvlc_media_parsed_status_failed ||
+          status == libvlc_media_parsed_status_timeout)
+        break;
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
 
     info.length = libvlc_media_get_duration(media);
 
@@ -115,17 +123,6 @@ namespace ae {
 
     libvlc_media_tracks_release(tracks, track_count);
 
-    if (info.width == 0 or info.height == 0) {
-      printf("libvlc encountered a weird bug reading the media\n");
-      printf("Validate the media a try again.\n");
-      return false;
-    }
-
-    // FIXME: Figure out what is the proper way to do this, I'm too tired rn
-    libvlc_media_add_option(media, ":avcodec-hw=vda");
-    // No subtitles
-    libvlc_media_add_option(media, "input-repeat=-1");
-
     player = libvlc_media_player_new_from_media(media);
     libvlc_media_release(media);
 
@@ -134,11 +131,37 @@ namespace ae {
       return false;
     }
 
+    // Some codecs (e.g. Theora) don't report dimensions from metadata.
+    // Briefly play to let VLC decode a frame and detect the size.
+    if (info.width == 0 || info.height == 0) {
+      libvlc_media_player_play(player);
+      for (int i = 0; i < 50; ++i) {
+        unsigned w = 0, h = 0;
+        if (libvlc_video_get_size(player, 0, &w, &h) == 0 && w > 0 && h > 0) {
+          info.width = w;
+          info.height = h;
+          break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      }
+      libvlc_media_player_stop(player);
+    }
+
+    if (info.width == 0 || info.height == 0) {
+      printf("libvlc could not determine video dimensions.\n");
+      return false;
+    }
+
+    if (info.framerate_den > 0)
+      info.framerate = info.framerate_num / (double) info.framerate_den;
+    else
+      info.framerate = 30.0;
+
     data.resize(info.width * info.height * 4);
 
     libvlc_video_set_callbacks(player, ctx_lock, ctx_unlock, ctx_display, &(data[0]));
     libvlc_video_set_format(player, "RGBA", info.width, info.height, info.width*4);
-    
+
     libvlc_media_player_play(player);
 
     libvlc_track_description_t* t = libvlc_video_get_spu_description(player);

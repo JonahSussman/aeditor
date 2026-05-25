@@ -3,6 +3,7 @@
 // ago, I finally made one that... semi-works? No guarantees that this will
 // compile on your machine, fair warning.
 
+#include <cfloat>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -563,6 +564,42 @@ namespace wm {
     }
   } line_selector;
 
+  static struct Help : public Window {
+    virtual void draw() {
+      ig::SetNextWindowSizeConstraints(ImVec2(420, 0), ImVec2(FLT_MAX, FLT_MAX));
+      ig::Begin("Help", &show, ImGuiWindowFlags_AlwaysAutoResize);
+      ig::Text("Keyboard Shortcuts");
+      ig::Separator();
+
+      ig::Columns(2, "help_cols");
+      ig::SetColumnWidth(0, 200);
+
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Space");       ig::NextColumn(); ig::Text("Play / Pause");           ig::NextColumn();
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Left / Right"); ig::NextColumn(); ig::Text("Seek +/- 5 seconds");     ig::NextColumn();
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Up / Down");    ig::NextColumn(); ig::Text("Previous / next line");    ig::NextColumn();
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "S");            ig::NextColumn(); ig::Text("Seek to timestamp");       ig::NextColumn();
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "V");            ig::NextColumn(); ig::Text("Toggle video window");     ig::NextColumn();
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "L");            ig::NextColumn(); ig::Text("Toggle loop");             ig::NextColumn();
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "C");            ig::NextColumn(); ig::Text("Set timestamp to now");    ig::NextColumn();
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "\\");           ig::NextColumn(); ig::Text("Edit current line");       ig::NextColumn();
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Shift+\\");     ig::NextColumn(); ig::Text("Update timestamp");        ig::NextColumn();
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "[ / ]");        ig::NextColumn(); ig::Text("Adjust timestamp +/- 50ms"); ig::NextColumn();
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Alt+[ / ]");    ig::NextColumn(); ig::Text("Adjust timestamp +/- 10ms"); ig::NextColumn();
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Delete");       ig::NextColumn(); ig::Text("Delete current line");     ig::NextColumn();
+
+      ig::Separator();
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Ctrl+O");       ig::NextColumn(); ig::Text("Open file");               ig::NextColumn();
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Ctrl+S");       ig::NextColumn(); ig::Text("Save CSV");                ig::NextColumn();
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Ctrl+N");       ig::NextColumn(); ig::Text("New line at current time"); ig::NextColumn();
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Ctrl+L");       ig::NextColumn(); ig::Text("Toggle line selector");    ig::NextColumn();
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Ctrl+A");       ig::NextColumn(); ig::Text("Align (MFA)");             ig::NextColumn();
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Ctrl+Z");       ig::NextColumn(); ig::Text("Undo last delete");        ig::NextColumn();
+
+      ig::Columns(1);
+      ig::End();
+    }
+  } help;
+
   static struct Console : public Window {
     FILE* wsl;
     char buf[256];
@@ -660,6 +697,8 @@ namespace wm {
         ig::MenuItem("Video", "V", &wm::video.show);
         ig::MenuItem("Line Selector", "CTRL+L", &wm::line_selector.show);
         ig::MenuItem("Console", "", &wm::console.show);
+        ig::Separator();
+        ig::MenuItem("Help", "F1", &wm::help.show);
 
         ig::EndMenu();
       }
@@ -682,6 +721,7 @@ namespace wm {
     if (video.show) video.draw();
     if (line_selector.show) line_selector.draw();
     if (console.show) console.draw();
+    if (help.show) help.draw();
 
     if (error.show)     error.draw();
     if (load.show)      load.draw();
@@ -705,7 +745,7 @@ bool load_files(std::string str) {
   ae::VLC* attempted_vlc_service = new ae::LoadedVLC();
 
   if (!attempted_vlc_service->initialize(str + ".mkv", {"--no-sub-autodetect-file"})) {
-    printf("could not load video file %s\n", str + ".mkv");
+    printf("could not load video file %s\n", (str + ".mkv").c_str());
     return false;
   }
 
@@ -726,7 +766,7 @@ bool load_script(std::string str) {
   ae::Script* attempted_script_service = new ae::LoadedScript();
 
   if (!attempted_script_service->initialize(str + ".csv")) {
-    printf("could not load script file %s\n", str + ".csv");
+    printf("could not load script file %s\n", (str + ".csv").c_str());
     return false;
   }
 
@@ -790,8 +830,7 @@ ae::Loop bounds(ae::Litr itr) {
 
 
 int main(int argc, char* argv[]) {
-  const int no_close = sf::Style::Titlebar | sf::Style::Close;
-  sf::RenderWindow window(sf::VideoMode(1600, 900), L"æditor", no_close);
+  sf::RenderWindow window(sf::VideoMode(1600, 900), L"æditor", sf::Style::Default);
   
   // Vertical sync
   window.setFramerateLimit(60);
@@ -956,6 +995,9 @@ int main(int argc, char* argv[]) {
               if (io->KeyCtrl){
                 script->add(script->pop_deleted());
               }
+              break;
+            case sfk::F1:
+              wm::help.show = !wm::help.show;
               break;
             }
           }
