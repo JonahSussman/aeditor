@@ -3,6 +3,7 @@
 // ago, I finally made one that... semi-works? No guarantees that this will
 // compile on your machine, fair warning.
 
+#include <algorithm>
 #include <cfloat>
 #include <chrono>
 #include <cstdio>
@@ -11,6 +12,7 @@
 #include <future>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -309,6 +311,97 @@ namespace wm {
       }
     }
   } transcriber;
+
+  static struct Renderer : public Window {
+    std::future<bool> future;
+    bool has_future = false;
+
+    void render() {
+      if (show) return;
+
+      auto script = Locator::get_script_service();
+      auto tools  = Locator::get_tools_service();
+
+      struct Job {
+        std::string word;
+        s64 timestamp;
+        float start_sec;
+        float length_sec;
+        int count;
+        int total;
+        int season;
+        int episode;
+      };
+
+      std::vector<Job> jobs;
+      for (auto itr = script->begin(); itr != script->end(); ++itr) {
+        auto& line = *itr;
+        if (line.str == "FIRST ELEMENT") continue;
+
+        s64 duration_ms = next_timestamp(itr) - line.timestamp;
+        if (duration_ms <= 0) continue;
+
+        jobs.push_back({
+          line.str,
+          line.timestamp,
+          line.timestamp / 1000.f,
+          duration_ms / 1000.f,
+          0, 0,
+          line.season,
+          line.episode
+        });
+      }
+
+      std::sort(jobs.begin(), jobs.end(), [](const Job& a, const Job& b) {
+        std::string al = a.word, bl = b.word;
+        std::transform(al.begin(), al.end(), al.begin(), ::tolower);
+        std::transform(bl.begin(), bl.end(), bl.begin(), ::tolower);
+        if (al != bl) return al < bl;
+        return a.timestamp < b.timestamp;
+      });
+
+      std::map<std::string, int> word_counts;
+      for (int i = 0; i < (int)jobs.size(); i++) {
+        std::string key = jobs[i].word;
+        std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+        word_counts[key]++;
+        jobs[i].count = word_counts[key];
+        jobs[i].total = i + 1;
+      }
+
+      std::ofstream manifest("data/render_manifest.csv");
+      for (auto& j : jobs) {
+        manifest << filename_no_ext << ","
+                 << j.start_sec << ","
+                 << j.length_sec << ","
+                 << j.word << ","
+                 << j.count << ","
+                 << j.total << ","
+                 << j.season << ","
+                 << j.episode << "\n";
+      }
+      manifest.close();
+
+      future = tools->render("data/render_manifest.csv", "data/render_output.mkv");
+      has_future = true;
+      show = true;
+    }
+
+    virtual void draw() {
+      ig::OpenPopup("Render");
+      if (ig::BeginPopupModal("Render")) {
+        if (has_future && util::future_ready(future)) {
+          future.get();
+          has_future = false;
+          show = false;
+        } else {
+          auto status = Locator::get_tools_service()->get_status();
+          ig::TextColored(ImVec4(1.f, .5f, .5f, 1.f), "%s", status.c_str());
+        }
+        ig::EndPopup();
+      }
+    }
+  } renderer;
 
   // FIXME: Figure out how to make this more... better
   static struct EditLine : public Window {
@@ -613,6 +706,7 @@ namespace wm {
       ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Ctrl+L");       ig::NextColumn(); ig::Text("Toggle line selector");    ig::NextColumn();
       ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Ctrl+A");       ig::NextColumn(); ig::Text("Align (MFA)");             ig::NextColumn();
       ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Ctrl+T");       ig::NextColumn(); ig::Text("Transcribe (Whisper)");    ig::NextColumn();
+      ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Ctrl+R");       ig::NextColumn(); ig::Text("Render compilation");      ig::NextColumn();
       ig::TextColored(ImVec4(.5f, .8f, .5f, 1.f), "Ctrl+Z");       ig::NextColumn(); ig::Text("Undo last delete");        ig::NextColumn();
 
       ig::Columns(1);
@@ -687,6 +781,9 @@ namespace wm {
       if (ig::BeginMenu("File")) {   
         ig::MenuItem("Save", "CTRL+S", &wm::save.show);
         ig::MenuItem("Load Video", "CTRL+O", &wm::load.show);
+        if (ig::MenuItem("Render", "CTRL+R")) {
+          wm::renderer.render();
+        }
 
         ig::EndMenu();
       }
@@ -739,6 +836,7 @@ namespace wm {
     if (edit_line.show) edit_line.draw();
     if (aligner.show)      aligner.draw();
     if (transcriber.show)  transcriber.draw();
+    if (renderer.show)     renderer.draw();
 
     // Clamp all windows so they stay on screen when the main window resizes
     ImVec2 display = io->DisplaySize;
@@ -975,6 +1073,11 @@ int main(int argc, char* argv[]) {
             case sfk::T:
               if (io->KeyCtrl) {
                 wm::transcriber.transcribe(litr);
+              }
+              break;
+            case sfk::R:
+              if (io->KeyCtrl) {
+                wm::renderer.render();
               }
               break;
             case sfk::C:

@@ -22,6 +22,11 @@ namespace ae {
     return p.get_future();
   }
   std::string NullTools::consume_transcribe_result() { return ""; }
+  std::future<bool> NullTools::render(const std::string&, const std::string&) {
+    std::promise<bool> p;
+    p.set_value(false);
+    return p.get_future();
+  }
   std::string NullTools::get_status() { return ""; }
 
   void LoadedTools::set_status(const std::string& s) {
@@ -124,5 +129,22 @@ namespace ae {
     std::string result;
     std::swap(result, transcribe_result);
     return result;
+  }
+
+  std::future<bool> LoadedTools::render(const std::string& manifest, const std::string& output) {
+    std::stringstream cmd;
+    cmd << "scripts/render_all.sh " << manifest << " " << output;
+    std::string command = cmd.str();
+
+    set_status("Starting render...");
+
+    return std::async(std::launch::async, [this, command, output]() -> bool {
+      shell_with_status(command.c_str());
+
+      std::ifstream f(output);
+      bool ok = f.good();
+      set_status(ok ? "Render complete." : "Render failed.");
+      return ok;
+    });
   }
 }

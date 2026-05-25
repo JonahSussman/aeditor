@@ -19,6 +19,8 @@ namespace ae {
     virtual std::future<bool> transcribe(Loop bounds, const std::string& filename) = 0;
     virtual std::string consume_transcribe_result() = 0;
 
+    virtual std::future<bool> render(const std::string& manifest, const std::string& output) = 0;
+
     virtual std::string get_status() = 0;
   };
 
@@ -28,6 +30,7 @@ namespace ae {
     std::vector<Line> consume_align_results() override;
     std::future<bool> transcribe(Loop bounds, const std::string& filename) override;
     std::string consume_transcribe_result() override;
+    std::future<bool> render(const std::string& manifest, const std::string& output) override;
     std::string get_status() override;
   };
 
@@ -37,6 +40,7 @@ namespace ae {
     std::vector<Line> consume_align_results() override;
     std::future<bool> transcribe(Loop bounds, const std::string& filename) override;
     std::string consume_transcribe_result() override;
+    std::future<bool> render(const std::string& manifest, const std::string& output) override;
     std::string get_status() override;
   private:
     std::vector<Line> align_results;
