@@ -42,7 +42,7 @@ namespace ae {
     // Returns and itr of the element right after the erased element
     virtual Litr erase(Litr itr) = 0;
     virtual Litr erase(s64 ms) = 0;
-    virtual Line pop_deleted();
+    virtual Line pop_deleted() = 0;
     // Returns the new line's itr
     virtual Litr update(Litr itr, Line l) = 0;
     virtual Litr update(s64 ms, Line l) = 0;

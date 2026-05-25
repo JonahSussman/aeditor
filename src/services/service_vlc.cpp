@@ -1,6 +1,10 @@
 #include "service_vlc.hpp"
 
-#include <bits/stdc++.h>
+#include <cassert>
+#include <cinttypes>
+#include <cstdio>
+#include <string>
+#include <vector>
 
 #include "locator.hpp"
 

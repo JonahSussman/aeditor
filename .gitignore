@@ -1,6 +1,35 @@
+# Build output
+build/
+cmake-build-*/
+
+# Object files and binaries
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+
+# ImGui state
+imgui.ini
+
+# Media files
+*.mkv
+*.wav
+
+# External tools
 gentle/
 montreal-forced-aligner/
 montreal-forced-aligner-windows/
 lib/
-*.mkv
-*.wav
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db

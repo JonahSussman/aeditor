@@ -3,7 +3,16 @@
 // ago, I finally made one that... semi-works? No guarantees that this will
 // compile on your machine, fair warning.
 
-#include <bits/stdc++.h>
+#include <chrono>
+#include <cstdio>
+#include <cstring>
+#include <fstream>
+#include <future>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
 
 #include <SFML/System.hpp>
 #include <SFML/Window.hpp>
@@ -495,7 +504,8 @@ namespace wm {
       ig::BeginChild("Lines");
 
       ig::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-      ImGuiListClipper clipper(script->size());
+      ImGuiListClipper clipper;
+      clipper.Begin(script->size());
 
       while (clipper.Step()) {
         int i = 0;
@@ -505,7 +515,7 @@ namespace wm {
 
           if (itr == current) {
             ig::PushStyleColor(ImGuiCol_Header, ae::aqua_dark);
-            if (Locator::mode == Mode::PLAYING) { ig::SetScrollHere(); }
+            if (Locator::mode == Mode::PLAYING) { ig::SetScrollHereY(); }
           } else {
             ig::PushStyleColor(ImGuiCol_Header, i%2 ? ae::bg0 : ae::bg1);
           }
@@ -581,7 +591,8 @@ namespace wm {
 
       ig::BeginChild("Console List", ImVec2(0, -m));
       
-      ImGuiListClipper clipper(history.size());
+      ImGuiListClipper clipper;
+      clipper.Begin(history.size());
       while (clipper.Step()) {
         for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
           ig::Text(history[i].c_str());
@@ -589,7 +600,7 @@ namespace wm {
       }
 
       if (future and util::future_ready(*future)) {
-        ig::SetScrollHere();
+        ig::SetScrollHereY();
 
         std::stringstream ss(future->get());
         std::string to;
